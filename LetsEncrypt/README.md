@@ -6,7 +6,7 @@ Adds a `letsencrypt_cert` operation that issues or renews certificates with cert
 - Point Geppetto at this directory via `plugin_dirs` in your `main.conf`:
   ```toml
   [defaults]
-  plugin_dirs = ["/home/dave/git/Geppetto_Plugins/LetsEncrypt"]
+  plugin_dirs = ["/etc/geppetto/plugins/LetsEncrypt"]
   ```
 - Ensure `certbot` and `openssl` are available on the target host.
 
