@@ -38,9 +38,8 @@ class LetsEncryptCertificate(Operation):
         self.email = str(raw_email)
 
         raw_webroot = spec.get("webroot")
-        if not raw_webroot:
-            raise ValueError("letsencrypt_cert requires a webroot path for HTTP-01 challenges")
-        self.webroot = Path(str(raw_webroot))
+        self.webroot = Path(str(raw_webroot)) if raw_webroot else None
+        self.standalone = bool(spec.get("standalone", False) or not self.webroot)
 
         self.cert_name = str(spec.get("cert_name") or self.domains[0])
         self.state = str(spec.get("state", "present"))
@@ -67,8 +66,10 @@ class LetsEncryptCertificate(Operation):
         if self.state == "absent":
             return self._ensure_absent(host, executor)
 
-        if not self.webroot.exists():
+        if self.webroot and not self.webroot.exists() and not self.standalone:
             raise ValueError(f"webroot path {self.webroot} does not exist on target host")
+        if not self.webroot and not self.standalone:
+            raise ValueError("either provide webroot or set standalone=true")
 
         expiry = self._current_expiry(executor)
         current_domains = self._current_domains()
@@ -89,7 +90,8 @@ class LetsEncryptCertificate(Operation):
 
         existing = self.live_cert_path.exists()
         self._issue_or_renew(executor)
-        detail = "renewed" if existing else "requested"
+        mode = "standalone" if self.standalone else "webroot"
+        detail = ("renewed" if existing else "requested") + f" mode={mode}"
         return ActionResult(host=host.name, action="letsencrypt_cert", changed=True, details=detail)
 
     def _current_expiry(self, executor: Executor) -> datetime | None:
@@ -125,14 +127,15 @@ class LetsEncryptCertificate(Operation):
             "--non-interactive",
             "--agree-tos",
             "--keep-until-expiring",
-            "--webroot",
-            "-w",
-            str(self.webroot),
             "--email",
             self.email,
             "--cert-name",
             self.cert_name,
         ]
+        if self.standalone:
+            cmd.append("--standalone")
+        else:
+            cmd.extend(["--webroot", "-w", str(self.webroot)])
         if self.force_renew:
             cmd.append("--force-renewal")
         if self.staging:
